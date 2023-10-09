@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.ecommerece.R;
+import com.example.ecommerece.helper.CategoryButtonAdapter;
 import com.example.ecommerece.helper.ProductAdapter;
 import com.example.ecommerece.model.Product;
 import com.example.ecommerece.model.ProductListResponse;
@@ -21,6 +22,7 @@ import com.example.ecommerece.utility.PaginationScrollListener;
 import com.example.ecommerece.utility.RetrofitClient;
 import com.example.ecommerece.utility.Session;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import retrofit2.Call;
@@ -31,12 +33,17 @@ public class MainActivity extends AppCompatActivity {
     private static final int PAGE_SIZE = 10;
 
     private RecyclerView recyclerView;
+    private RecyclerView recycleCatView;
     private ProductAdapter productAdapter;
+    private CategoryButtonAdapter categoryButtonAdapter;
     private LinearLayoutManager layoutManager;
+    private LinearLayoutManager layoutCatManager;
     private boolean isLoading = false;
     private boolean isLastPage = false;
     private int currentPage = 0;
     private int totalPageCount;
+    private List<String> categoriesList = new ArrayList<>();
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,9 +51,13 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         recyclerView = findViewById(R.id.recyclerView);
+        recycleCatView = findViewById(R.id.recyclerCatView);
         layoutManager = new LinearLayoutManager(this);
+        layoutCatManager = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
         recyclerView.setLayoutManager(layoutManager);
+        recycleCatView.setLayoutManager(layoutCatManager);
         productAdapter = new ProductAdapter(this);
+
         recyclerView.setAdapter(productAdapter);
 
         // Add PaginationScrollListener for infinite scrolling
@@ -78,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Fetch the initial data
         fetchAllProducts(currentPage);
+        fectchAllCategory();
 
         //Proses Search
         EditText searchEditText = findViewById(R.id.searchProductTextField); // Replace with your EditText's ID
@@ -96,34 +108,45 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        //Ny Catagory
-        Button catagoryButton1 = findViewById(R.id.catagory1Button); // Replace with your Button's ID
-        catagoryButton1.setOnClickListener(new View.OnClickListener() {
+         categoryButtonAdapter = new CategoryButtonAdapter(categoriesList, new CategoryButtonAdapter.CategoryClickListener() {
             @Override
-            public void onClick(View view) {
-                // This block is executed when the button is clicked
-                fetchProductsByCategory(catagoryButton1.getText().toString());
+            public void onCategoryClick(String category) {
+                // Handle category button click
+                // You can perform actions based on the selected category here
+                if(category.equalsIgnoreCase("ALL")) {
+                    fetchAllProducts(0);
+                }
+                else{
+                    fetchProductsByCategory(category);
+                }
             }
         });
 
-        Button catagoryButton2 = findViewById(R.id.catagory2Button); // Replace with your Button's ID
-        catagoryButton2.setOnClickListener(new View.OnClickListener() {
+        recycleCatView.setAdapter(categoryButtonAdapter);
+    }
+
+    private void fectchAllCategory(){
+        // Make an API request using Retrofit to fetch products
+        ApiService apiService = RetrofitClient.getClient(Session.url).create(ApiService.class);
+        Call<List<String>> call = apiService.getCategories();
+        call.enqueue(new Callback<List<String>>() {
             @Override
-            public void onClick(View view) {
-                // This block is executed when the button is clicked
-                fetchProductsByCategory(catagoryButton2.getText().toString());
+            public void onResponse(Call<List<String>> call, Response<List<String>> response) {
+                if (response.isSuccessful()) {
+                    List<String> categories = response.body();
+                    // Update the categoriesList with the fetched data
+                    categoriesList.clear();
+                    categories.add(0,"ALL");
+                    categoriesList.addAll(categories);
+                    categoryButtonAdapter.notifyDataSetChanged(); // Notify the adapter of data change
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<String>> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "No Internet Connection/ Server Issue!", Toast.LENGTH_LONG).show();
             }
         });
-
-        Button catagoryButton3 = findViewById(R.id.catagory3Button); // Replace with your Button's ID
-        catagoryButton3.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // This block is executed when the button is clicked
-                fetchProductsByCategory(catagoryButton3.getText().toString());
-            }
-        });
-
 
     }
 
@@ -140,8 +163,11 @@ public class MainActivity extends AppCompatActivity {
                 isLoading = false;
                 if (response.isSuccessful()) {
                     ProductListResponse productListResponse = response.body();
+
                     if (productListResponse != null) {
                         List<Product> newProducts = productListResponse.getProducts();
+
+                        productAdapter.clearProducts(); // Clear existing data
                         productAdapter.addProducts(newProducts);
 
                         // Check if this is the last page
